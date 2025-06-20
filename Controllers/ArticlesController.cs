@@ -26,7 +26,6 @@ namespace IncanaPortfolio.Api.Controllers
         [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<Article>>> GetArticles()
         {
-
             var articles = await _context.Articles
                 .Select(a => new
                 {
@@ -34,16 +33,14 @@ namespace IncanaPortfolio.Api.Controllers
                     a.Title,
                     a.PublishedDate,
                     AuthorUsername = a.Author.UserName,
-                    a.Content 
+                    a.Content
                 })
                 .OrderByDescending(a => a.PublishedDate)
                 .ToListAsync();
-
             return Ok(articles);
         }
 
         // GET: api/articles/{id}
-        // Comments functionality isn't implemented yet, but eh. I'll work on it later :V
         [HttpGet("{id}")]
         [AllowAnonymous]
         public async Task<ActionResult<Article>> GetArticle(int id)
@@ -58,13 +55,15 @@ namespace IncanaPortfolio.Api.Controllers
                 return NotFound();
             }
 
+            // Corrected the structure of the returned object
             var result = new
             {
                 article.Id,
                 article.Title,
                 article.Content,
                 article.PublishedDate,
-                Author = new { article.Author.UserName },
+                // This property now matches the frontend's expectation and the other endpoint
+                AuthorUsername = article.Author.UserName,
                 Comments = article.Comments.Select(c => new
                 {
                     c.Id,
@@ -80,7 +79,7 @@ namespace IncanaPortfolio.Api.Controllers
 
         // POST: api/articles
         [HttpPost]
-        [Authorize] // Only authenticated users can create articles
+        [Authorize]
         public async Task<ActionResult<Article>> PostArticle(ArticleCreateModel model)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -94,7 +93,7 @@ namespace IncanaPortfolio.Api.Controllers
                 Title = model.Title,
                 Content = model.Content,
                 AuthorId = userId,
-                PublishedDate = DateTime.UtcNow
+                PublishedDate = System.DateTime.UtcNow
             };
 
             _context.Articles.Add(article);
@@ -142,7 +141,7 @@ namespace IncanaPortfolio.Api.Controllers
                 }
             }
 
-            return NoContent(); 
+            return NoContent();
         }
 
         // DELETE: api/articles/{id}
