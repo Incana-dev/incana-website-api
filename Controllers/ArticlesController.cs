@@ -24,16 +24,16 @@ namespace IncanaPortfolio.Api.Controllers
         // GET: api/articles
         [HttpGet]
         [AllowAnonymous]
-        public async Task<ActionResult<IEnumerable<Article>>> GetArticles()
+        public async Task<ActionResult<IEnumerable<ArticleDto>>> GetArticles()
         {
             var articles = await _context.Articles
-                .Select(a => new
+                .Select(a => new ArticleDto
                 {
-                    a.Id,
-                    a.Title,
-                    a.PublishedDate,
+                    Id = a.Id,
+                    Title = a.Title,
+                    PublishedDate = a.PublishedDate,
                     AuthorUsername = a.Author.UserName,
-                    a.Content
+                    Content = a.Content
                 })
                 .OrderByDescending(a => a.PublishedDate)
                 .ToListAsync();
@@ -43,7 +43,7 @@ namespace IncanaPortfolio.Api.Controllers
         // GET: api/articles/{id}
         [HttpGet("{id}")]
         [AllowAnonymous]
-        public async Task<ActionResult<Article>> GetArticle(int id)
+        public async Task<ActionResult<ArticleDto>> GetArticle(int id)
         {
             var article = await _context.Articles
                 .Include(a => a.Author)
@@ -55,23 +55,21 @@ namespace IncanaPortfolio.Api.Controllers
                 return NotFound();
             }
 
-            // Corrected the structure of the returned object
-            var result = new
+            var result = new ArticleDto
             {
-                article.Id,
-                article.Title,
-                article.Content,
-                article.PublishedDate,
-                // This property now matches the frontend's expectation and the other endpoint
+                Id = article.Id,
+                Title = article.Title,
+                Content = article.Content,
+                PublishedDate = article.PublishedDate,
                 AuthorUsername = article.Author.UserName,
-                Comments = article.Comments.Select(c => new
+                Comments = article.Comments.Select(c => new CommentDto
                 {
-                    c.Id,
-                    c.Content,
-                    c.AuthorEmail,
-                    c.PostedDate,
-                    c.ParentCommentId
-                })
+                    Id = c.Id,
+                    Content = c.Content,
+                    AuthorEmail = c.AuthorEmail,
+                    PostedDate = c.PostedDate,
+                    ParentCommentId = c.ParentCommentId
+                }).ToList()
             };
 
             return Ok(result);
@@ -80,7 +78,7 @@ namespace IncanaPortfolio.Api.Controllers
         // POST: api/articles
         [HttpPost]
         [Authorize]
-        public async Task<ActionResult<Article>> PostArticle(ArticleCreateModel model)
+        public async Task<ActionResult<ArticleDto>> PostArticle(ArticleCreateModel model)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null)
@@ -88,18 +86,35 @@ namespace IncanaPortfolio.Api.Controllers
                 return Unauthorized("User ID could not be determined from token.");
             }
 
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return BadRequest("Author not found.");
+            }
+
             var article = new Article
             {
                 Title = model.Title,
                 Content = model.Content,
                 AuthorId = userId,
+                Author = user,
                 PublishedDate = System.DateTime.UtcNow
             };
 
             _context.Articles.Add(article);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetArticle), new { id = article.Id }, article);
+            var result = new ArticleDto
+            {
+                Id = article.Id,
+                Title = article.Title,
+                Content = article.Content,
+                PublishedDate = article.PublishedDate,
+                AuthorUsername = article.Author.UserName,
+                Comments = new List<CommentDto>()
+            };
+
+            return CreatedAtAction(nameof(GetArticle), new { id = article.Id }, result);
         }
 
         // PUT: api/articles/{id}
@@ -166,6 +181,26 @@ namespace IncanaPortfolio.Api.Controllers
 
             return NoContent();
         }
+    }
+
+
+    public class ArticleDto
+    {
+        public int Id { get; set; }
+        public required string Title { get; set; }
+        public required string Content { get; set; }
+        public System.DateTime PublishedDate { get; set; }
+        public required string AuthorUsername { get; set; }
+        public List<CommentDto> Comments { get; set; } = new List<CommentDto>();
+    }
+
+    public class CommentDto
+    {
+        public int Id { get; set; }
+        public required string Content { get; set; }
+        public required string AuthorEmail { get; set; }
+        public System.DateTime PostedDate { get; set; }
+        public int? ParentCommentId { get; set; }
     }
 
 
