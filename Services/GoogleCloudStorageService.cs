@@ -3,30 +3,32 @@ using Google.Cloud.Storage.V1;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.IO;
+using System.Net.Http; // Required for HttpMethod
 using System.Threading.Tasks;
 
 namespace IncanaPortfolio.Api.Services
 {
     public interface IStorageService
     {
-        Task<string> UploadFileAsync(IFormFile imageFile);
+        Task<(string signedUrl, string objectName)> UploadFileAsync(IFormFile imageFile);
+        string GetSignedUrlForObject(string objectName);
     }
 
     public class GoogleCloudStorageService : IStorageService
     {
         private readonly StorageClient _storageClient;
+        private readonly GoogleCredential _credential;
         private readonly string _bucketName;
 
         public GoogleCloudStorageService(ISecretManagerService secretManager)
         {
-            // Get all necessary configuration from the secret manager service
             _bucketName = secretManager.GetSecret("incana-portfolio-media");
             var credentialsJson = secretManager.GetSecret("incana-portfolio-serv-acc");
 
             try
             {
-                var credentials = GoogleCredential.FromJson(credentialsJson);
-                _storageClient = StorageClient.Create(credentials);
+                _credential = GoogleCredential.FromJson(credentialsJson);
+                _storageClient = StorageClient.Create(_credential);
             }
             catch (Exception ex)
             {
@@ -34,7 +36,8 @@ namespace IncanaPortfolio.Api.Services
             }
         }
 
-        public async Task<string> UploadFileAsync(IFormFile imageFile)
+        // This is the single, correct implementation of the interface method.
+        public async Task<(string signedUrl, string objectName)> UploadFileAsync(IFormFile imageFile)
         {
             var objectName = $"{Guid.NewGuid()}-{imageFile.FileName}";
 
@@ -43,15 +46,38 @@ namespace IncanaPortfolio.Api.Services
                 await imageFile.CopyToAsync(memoryStream);
                 memoryStream.Position = 0;
 
-                var uploadedObject = await _storageClient.UploadObjectAsync(
+                await _storageClient.UploadObjectAsync(
                     bucket: _bucketName,
                     objectName: objectName,
                     contentType: imageFile.ContentType,
                     source: memoryStream
                 );
-
-                return uploadedObject.MediaLink;
             }
+
+            // Create a short-lived URL for immediate preview after upload
+            var urlSigner = UrlSigner.FromCredential(_credential);
+            string signedUrl = urlSigner.Sign(
+                bucket: _bucketName,
+                objectName: objectName,
+                duration: TimeSpan.FromMinutes(10), // Short duration for preview
+                httpMethod: HttpMethod.Get
+            );
+
+            // Return both the preview URL and the permanent object name
+            return (signedUrl, objectName);
+        }
+
+        public string GetSignedUrlForObject(string objectName)
+        {
+            var urlSigner = UrlSigner.FromCredential(_credential);
+            string signedUrl = urlSigner.Sign(
+                bucket: _bucketName,
+                objectName: objectName,
+                duration: TimeSpan.FromHours(2),
+                httpMethod: HttpMethod.Get
+            );
+
+            return signedUrl;
         }
     }
 }

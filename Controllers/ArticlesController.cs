@@ -1,4 +1,5 @@
-﻿using IncanaPortfolio.Data;
+﻿using IncanaPortfolio.Api.Services;
+using IncanaPortfolio.Data;
 using IncanaPortfolio.Data.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace IncanaPortfolio.Api.Controllers
@@ -15,10 +17,12 @@ namespace IncanaPortfolio.Api.Controllers
     public class ArticlesController : ControllerBase
     {
         private readonly IncanaPortfolioDbContext _context;
+        private readonly IStorageService _storageService;
 
-        public ArticlesController(IncanaPortfolioDbContext context)
+        public ArticlesController(IncanaPortfolioDbContext context, IStorageService storageService)
         {
             _context = context;
+            _storageService = storageService;
         }
 
         // GET: api/articles
@@ -37,6 +41,10 @@ namespace IncanaPortfolio.Api.Controllers
                 })
                 .OrderByDescending(a => a.PublishedDate)
                 .ToListAsync();
+
+            // 3. Process the content for each article in the list
+            articles.ForEach(a => a.Content = ProcessMarkdownContent(a.Content));
+
             return Ok(articles);
         }
 
@@ -55,11 +63,15 @@ namespace IncanaPortfolio.Api.Controllers
                 return NotFound();
             }
 
+            // 4. Process the raw content from the database
+            var processedContent = ProcessMarkdownContent(article.Content);
+
             var result = new ArticleDto
             {
                 Id = article.Id,
                 Title = article.Title,
-                Content = article.Content,
+                // 5. Use the processed content in the response
+                Content = processedContent,
                 PublishedDate = article.PublishedDate,
                 AuthorUsername = article.Author.UserName,
                 Comments = article.Comments.Select(c => new CommentDto
@@ -74,6 +86,35 @@ namespace IncanaPortfolio.Api.Controllers
 
             return Ok(result);
         }
+
+        // 6. This is now an instance method that can access _storageService
+        private string ProcessMarkdownContent(string content)
+        {
+            if (string.IsNullOrEmpty(content))
+            {
+                return content;
+            }
+
+            // Regex for custom video tags: <gcs-video name="..."></gcs-video>
+            var videoProcessedContent = Regex.Replace(content, @"<gcs-video name=""([^""]+)""></gcs-video>", match =>
+            {
+                string objectName = match.Groups[1].Value;
+                string signedUrl = _storageService.GetSignedUrlForObject(objectName);
+                return $"<video controls src=\"{signedUrl}\" width=\"100%\"></video>";
+            });
+
+            // Regex for GCS image tags: ![...](gcs://object-name)
+            var finalProcessedContent = Regex.Replace(videoProcessedContent, @"!\[(.*?)\]\(gcs:\/\/([^\)]+)\)", match =>
+            {
+                string altText = match.Groups[1].Value;
+                string objectName = match.Groups[2].Value;
+                string signedUrl = _storageService.GetSignedUrlForObject(objectName);
+                return $"![{altText}]({signedUrl})";
+            });
+
+            return finalProcessedContent;
+        }
+
 
         // POST: api/articles
         [HttpPost]
@@ -104,6 +145,7 @@ namespace IncanaPortfolio.Api.Controllers
             _context.Articles.Add(article);
             await _context.SaveChangesAsync();
 
+            // The content returned here is the raw, unprocessed content, which is correct.
             var result = new ArticleDto
             {
                 Id = article.Id,
