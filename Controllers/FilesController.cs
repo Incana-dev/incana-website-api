@@ -24,8 +24,9 @@ public class FilesController : ControllerBase
             return BadRequest("No file uploaded.");
         }
 
-        var fileUrl = await _storageService.UploadFileAsync(file);
+        var (previewUrl, objectName) = await _storageService.UploadFileAsync(file);
 
-        return Ok(new { Url = fileUrl });
+        return Ok(new { previewUrl, objectName });
+
     }
 }
