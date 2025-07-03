@@ -37,13 +37,12 @@ namespace IncanaPortfolio.Api.Controllers
                     Title = a.Title,
                     PublishedDate = a.PublishedDate,
                     AuthorUsername = a.Author.UserName,
-                    Content = a.Content
+                    Content = a.Content.Length > 200
+                        ? a.Content.Substring(0, 200) + "..."
+                        : a.Content
                 })
                 .OrderByDescending(a => a.PublishedDate)
                 .ToListAsync();
-
-            // 3. Process the content for each article in the list
-            articles.ForEach(a => a.Content = ProcessMarkdownContent(a.Content));
 
             return Ok(articles);
         }
@@ -63,14 +62,12 @@ namespace IncanaPortfolio.Api.Controllers
                 return NotFound();
             }
 
-            // 4. Process the raw content from the database
             var processedContent = ProcessMarkdownContent(article.Content);
 
             var result = new ArticleDto
             {
                 Id = article.Id,
                 Title = article.Title,
-                // 5. Use the processed content in the response
                 Content = processedContent,
                 PublishedDate = article.PublishedDate,
                 AuthorUsername = article.Author.UserName,
@@ -87,7 +84,6 @@ namespace IncanaPortfolio.Api.Controllers
             return Ok(result);
         }
 
-        // 6. This is now an instance method that can access _storageService
         private string ProcessMarkdownContent(string content)
         {
             if (string.IsNullOrEmpty(content))
@@ -145,7 +141,6 @@ namespace IncanaPortfolio.Api.Controllers
             _context.Articles.Add(article);
             await _context.SaveChangesAsync();
 
-            // The content returned here is the raw, unprocessed content, which is correct.
             var result = new ArticleDto
             {
                 Id = article.Id,

@@ -11,8 +11,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 
 var secretManager = new GoogleSecretManagerService();
+string dbConnectionString;
 
-var dbConnectionString = secretManager.GetSecret("PostgreSqlConnection");
+if (builder.Environment.IsDevelopment())
+{
+    // This connection string points to the 'proxy-db' container.
+    // You must get the user/password from your secret manager.
+    var dbUser = secretManager.GetSecret("IncanaDbAdminName");
+    var dbPass = secretManager.GetSecret("IncanaDbAdminPw");
+    dbConnectionString = $"Host=proxy-db;Port=5432;Database=incana_portfolio_db;Username={dbUser};Password={dbPass}";
+}
+else
+{
+    // This is your existing production connection string
+    dbConnectionString = secretManager.GetSecret("PostgreSqlConnection");
+}
 var jwtSecret = secretManager.GetSecret("JWTSecret");
 var jwtIssuer = secretManager.GetSecret("ValidIssuer");
 var jwtAudience = secretManager.GetSecret("ValidAudience");
@@ -24,7 +37,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: CorsPolicy, policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "https://www.incana.studio", "https://incana.studio")
+        policy.WithOrigins("http://localhost:5173", "http://localhost:3000", "http://localhost:8081", "https://www.incana.studio", "https://incana.studio")
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -83,6 +96,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseRouting();
 
 app.UseCors(CorsPolicy);
 

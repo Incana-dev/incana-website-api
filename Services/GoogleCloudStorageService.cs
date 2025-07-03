@@ -20,23 +20,31 @@ namespace IncanaPortfolio.Api.Services
         private readonly GoogleCredential _credential;
         private readonly string _bucketName;
 
-        public GoogleCloudStorageService(ISecretManagerService secretManager)
+        public GoogleCloudStorageService(ISecretManagerService secretManager, IWebHostEnvironment env)
         {
             _bucketName = secretManager.GetSecret("incana-portfolio-media");
-            var credentialsJson = secretManager.GetSecret("incana-portfolio-serv-acc");
 
-            try
+            if (env.IsDevelopment())
             {
-                _credential = GoogleCredential.FromJson(credentialsJson);
-                _storageClient = StorageClient.Create(_credential);
+                // In Development, create the client directly.
+                _storageClient = StorageClient.Create();
+                _credential = GoogleCredential.GetApplicationDefault();
             }
-            catch (Exception ex)
+            else
             {
-                throw new InvalidOperationException("Failed to create Google Storage client from credentials.", ex);
+                var credentialsJson = secretManager.GetSecret("incana-portfolio-serv-acc");
+                try
+                {
+                    _credential = GoogleCredential.FromJson(credentialsJson);
+                    _storageClient = StorageClient.Create(_credential);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("Failed to create Google Storage client from credentials.", ex);
+                }
             }
         }
 
-        // This is the single, correct implementation of the interface method.
         public async Task<(string signedUrl, string objectName)> UploadFileAsync(IFormFile imageFile)
         {
             var objectName = $"{Guid.NewGuid()}-{imageFile.FileName}";
